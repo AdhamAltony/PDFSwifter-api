@@ -8,13 +8,21 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 import yt_dlp
 
+from fastapi import UploadFile, File
+import pdfplumber
+import pandas as pd
+
+
 # =============================
 # App and Constants
 # =============================
 app = FastAPI()
 DOWNLOAD_FOLDER = "downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
-
+PDF_DOWNLOAD_FOLDER = "pdf_uploads"
+EXCEL_DOWNLOAD_FOLDER = "excel_outputs"
+os.makedirs(PDF_DOWNLOAD_FOLDER, exist_ok=True)
+os.makedirs(EXCEL_DOWNLOAD_FOLDER, exist_ok=True)
 
 # =============================
 # Utility Functions
@@ -73,3 +81,45 @@ def download_youtube(url):
     safe_filename = ascii_filename(os.path.basename(filename))
     headers = {"Content-Disposition": f'attachment; filename="{safe_filename}"'}
     return FileResponse(filename, filename=safe_filename, headers=headers)
+
+# =============================
+# Endpoint
+# =============================
+@app.post("/pdf/to-excel")
+async def pdf_to_excel(file: UploadFile = File(...)):
+    if not file.filename.lower().endswith(".pdf"):
+        return {"error": "Please upload a PDF file."}
+
+    pdf_path = os.path.join(PDF_DOWNLOAD_FOLDER, file.filename)
+    with open(pdf_path, "wb") as f:
+        f.write(await file.read())
+
+    base_name = os.path.splitext(os.path.basename(file.filename))[0]
+    excel_path = os.path.join(EXCEL_DOWNLOAD_FOLDER, base_name + ".xlsx")
+
+    try:
+        all_tables = []
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                table = page.extract_table()
+                if table:
+                    df = pd.DataFrame(table[1:], columns=table[0])
+                    all_tables.append(df)
+
+        if not all_tables:
+            return {"error": "No tables found in PDF."}
+
+        with pd.ExcelWriter(excel_path, engine="xlsxwriter") as writer:
+            for i, df in enumerate(all_tables):
+                sheet_name = f"Sheet{i+1}"
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+    except Exception as e:
+        return {"error": f"Failed to convert PDF: {str(e)}"}
+
+    delete_file_later(pdf_path)
+    delete_file_later(excel_path, delay=600)
+
+    safe_filename = ascii_filename(os.path.basename(excel_path))
+    headers = {"Content-Disposition": f'attachment; filename=\"{safe_filename}\"'}
+    return FileResponse(excel_path, filename=safe_filename, headers=headers)

@@ -2,3 +2,7 @@ yt-dlp>=2024.04.09
 fastapi
 uvicorn
 yt-dlp
+pdfplumber
+pandas
+xlsxwriter
+python-multipart
