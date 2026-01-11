@@ -34,6 +34,7 @@ for folder in (
 
 CHUNK_SIZE = 1024 * 1024  # 1MB
 YOUTUBE_REMOTE_ENDPOINT = os.environ.get("YOUTUBE_REMOTE_ENDPOINT")
+YOUTUBE_COOKIES_PATH = os.environ.get("YOUTUBE_COOKIES_PATH")
 
 # Retention / cleanup
 # - *_RETENTION_SECONDS controls how long files stay on disk.

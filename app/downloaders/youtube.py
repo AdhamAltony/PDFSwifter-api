@@ -7,7 +7,12 @@ from urllib.parse import unquote
 
 import httpx
 
-from app.config import DOWNLOAD_FOLDER, DOWNLOAD_RETENTION_SECONDS, YOUTUBE_REMOTE_ENDPOINT
+from app.config import (
+    DOWNLOAD_FOLDER,
+    DOWNLOAD_RETENTION_SECONDS,
+    YOUTUBE_COOKIES_PATH,
+    YOUTUBE_REMOTE_ENDPOINT,
+)
 from app.downloaders.common import download_video
 from app.services.download_tracker import DOWNLOAD_TRACKER
 from app.utils.file_ops import delete_file_later
@@ -32,6 +37,35 @@ def extract_filename_from_disposition(content_disposition: str) -> Optional[str]
             break
 
     return filename
+
+
+def build_youtube_download_options() -> dict:
+    """Return yt-dlp options for authenticated YouTube downloads when configured."""
+    if not YOUTUBE_COOKIES_PATH:
+        return {}
+    cookies_path = os.path.expanduser(YOUTUBE_COOKIES_PATH)
+    if not os.path.exists(cookies_path):
+        raise FileNotFoundError(
+            f"YOUTUBE_COOKIES_PATH not found: {cookies_path}"
+        )
+    return {"cookiefile": cookies_path}
+
+
+def map_youtube_download_error(error: Exception) -> Optional[str]:
+    """Map known yt-dlp errors to friendly messages."""
+    message = str(error)
+    lowered = message.lower()
+    if "confirm you" in lowered and "not a bot" in lowered:
+        return (
+            "YouTube requires sign-in to pass the bot check. Set YOUTUBE_COOKIES_PATH "
+            "to a cookies.txt exported from a logged-in account, then retry."
+        )
+    if "members-only" in lowered or "join this channel" in lowered:
+        return (
+            "YouTube video is members-only. Set YOUTUBE_COOKIES_PATH to a cookies.txt "
+            "exported from a logged-in account with access, then retry."
+        )
+    return None
 
 
 class BaseYouTubeDownloader(ABC):
@@ -119,6 +153,7 @@ class LocalYouTubeDownloader(BaseYouTubeDownloader):
             self.download_folder, "%(id)s_%(title)s.%(ext)s"
         )
         DOWNLOAD_TRACKER.update_job(process_id, status="running", progress=0.0)
+        custom_options = build_youtube_download_options()
 
         def hook(data):
             status = data.get("status")
@@ -137,13 +172,19 @@ class LocalYouTubeDownloader(BaseYouTubeDownloader):
             elif status == "finished":
                 DOWNLOAD_TRACKER.update_job(process_id, progress=100.0)
 
-        file_path = await asyncio.to_thread(
-            download_video,
-            video_url,
-            output_template,
-            None,
-            hook,
-        )
+        try:
+            file_path = await asyncio.to_thread(
+                download_video,
+                video_url,
+                output_template,
+                custom_options,
+                hook,
+            )
+        except Exception as exc:
+            mapped_error = map_youtube_download_error(exc)
+            if mapped_error:
+                raise RuntimeError(mapped_error) from exc
+            raise
 
         DOWNLOAD_TRACKER.update_job(
             process_id,

@@ -3,13 +3,12 @@ fastapi
 uvicorn
 yt-dlp
 httpx
-# PDF conversion deps (commented out for current testing focus)
-# pdfplumber
-# pandas
-# xlsxwriter
-# python-multipart
-# python-docx
-# pytesseract
-# Pillow
-# pdf2docx
-# PyMuPDF
+pdfplumber
+pandas
+xlsxwriter
+python-multipart
+python-docx
+pytesseract
+Pillow
+pdf2docx
+PyMuPDF
