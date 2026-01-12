@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 
 def _env_int(name: str, default: int) -> int:
@@ -17,11 +18,11 @@ def _env_bool(name: str, default: bool) -> bool:
         return default
     return value.strip().lower() in {"1", "true", "t", "yes", "y", "on"}
 
-DOWNLOAD_FOLDER = "downloads"
-PDF_DOWNLOAD_FOLDER = "pdf_uploads"
-EXCEL_DOWNLOAD_FOLDER = "excel_outputs"
-WORD_DOWNLOAD_FOLDER = "word_outputs"
-IMAGE_DOWNLOAD_FOLDER = "image_outputs"
+DOWNLOAD_FOLDER = Path(os.getenv("DOWNLOAD_FOLDER", "/data/downloads"))
+PDF_DOWNLOAD_FOLDER = Path(os.getenv("PDF_DOWNLOAD_FOLDER", "/data/pdf_uploads"))
+EXCEL_DOWNLOAD_FOLDER = Path(os.getenv("EXCEL_DOWNLOAD_FOLDER", "/data/excel_outputs"))
+WORD_DOWNLOAD_FOLDER = Path(os.getenv("WORD_DOWNLOAD_FOLDER", "/data/word_outputs"))
+IMAGE_DOWNLOAD_FOLDER = Path(os.getenv("IMAGE_DOWNLOAD_FOLDER", "/data/image_outputs"))
 
 for folder in (
     DOWNLOAD_FOLDER,
@@ -30,7 +31,7 @@ for folder in (
     WORD_DOWNLOAD_FOLDER,
     IMAGE_DOWNLOAD_FOLDER,
 ):
-    os.makedirs(folder, exist_ok=True)
+    folder.mkdir(parents=True, exist_ok=True)
 
 CHUNK_SIZE = 1024 * 1024  # 1MB
 YOUTUBE_REMOTE_ENDPOINT = os.environ.get("YOUTUBE_REMOTE_ENDPOINT")
