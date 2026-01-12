@@ -14,4 +14,8 @@ app = FastAPI(
 app.include_router(youtube_router)
 app.include_router(tiktok_router)
 app.include_router(downloads_router)
+ pdf-async-endpoints
+app.include_router(pdf_router)  # Temporarily disable PDF conversion endpoints
+
 app.include_router(pdf_router)
+

@@ -1,4 +1,5 @@
 import os
+import asyncio
 from zipfile import ZipFile
 
 import fitz
