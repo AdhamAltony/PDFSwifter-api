@@ -1,7 +1,6 @@
 yt-dlp>=2024.04.09
 fastapi
 uvicorn
-yt-dlp
 httpx
 pdfplumber
 pandas

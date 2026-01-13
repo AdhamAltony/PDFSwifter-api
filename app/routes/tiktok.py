@@ -5,6 +5,8 @@ from fastapi import APIRouter
 
 from app.config import DOWNLOAD_FOLDER
 from app.config import DOWNLOAD_RETENTION_SECONDS
+from app.config import DEFAULT_COOKIES_PATH
+from app.config import TIKTOK_COOKIES_PATH
 from app.downloaders.common import download_video
 from app.services.download_tracker import DOWNLOAD_TRACKER
 from app.utils.file_ops import delete_file_later
@@ -24,7 +26,20 @@ async def request_tiktok_download(url: str):
         "retries": 5,
         "fragment_retries": 5,
         "skip_unavailable_fragments": True,
+        "extractor_retries": 3,
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Referer": "https://www.tiktok.com/",
+        },
     }
+
+    cookies_path = TIKTOK_COOKIES_PATH or (str(DEFAULT_COOKIES_PATH) if DEFAULT_COOKIES_PATH.exists() else None)
+    if cookies_path:
+        custom_options["cookiefile"] = cookies_path
 
     async def runner():
         DOWNLOAD_TRACKER.update_job(job.process_id, status="running", progress=0.0)
@@ -55,8 +70,9 @@ async def request_tiktok_download(url: str):
                 hook,
             )
         except Exception as exc:
+            message = str(exc).replace("\n", " ").strip()
             DOWNLOAD_TRACKER.update_job(
-                job.process_id, status="failed", error=str(exc)
+                job.process_id, status="failed", error=message
             )
             return
 

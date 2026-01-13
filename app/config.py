@@ -24,6 +24,8 @@ EXCEL_DOWNLOAD_FOLDER = Path(os.getenv("EXCEL_DOWNLOAD_FOLDER", "/data/excel_out
 WORD_DOWNLOAD_FOLDER = Path(os.getenv("WORD_DOWNLOAD_FOLDER", "/data/word_outputs"))
 IMAGE_DOWNLOAD_FOLDER = Path(os.getenv("IMAGE_DOWNLOAD_FOLDER", "/data/image_outputs"))
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
 for folder in (
     DOWNLOAD_FOLDER,
     PDF_DOWNLOAD_FOLDER,
@@ -36,6 +38,9 @@ for folder in (
 CHUNK_SIZE = 1024 * 1024  # 1MB
 YOUTUBE_REMOTE_ENDPOINT = os.environ.get("YOUTUBE_REMOTE_ENDPOINT")
 YOUTUBE_COOKIES_PATH = os.environ.get("YOUTUBE_COOKIES_PATH")
+TIKTOK_COOKIES_PATH = os.environ.get("TIKTOK_COOKIES_PATH")
+
+DEFAULT_COOKIES_PATH = PROJECT_ROOT / "cookies1.txt"
 
 # Retention / cleanup
 # - *_RETENTION_SECONDS controls how long files stay on disk.
