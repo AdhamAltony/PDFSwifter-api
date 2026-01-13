@@ -162,7 +162,15 @@ async def compress_pdf_endpoint(file: UploadFile = File(...), level: str = "bala
 
         try:
             async with _PDF_COMPRESS_SEMAPHORE:
+                # Ensure output directory exists
+                os.makedirs(os.path.dirname(output_pdf_path), exist_ok=True)
                 await asyncio.to_thread(compress_pdf, input_pdf_path, output_pdf_path, level)
+                
+                # Verify output was actually created and is valid
+                if not os.path.exists(output_pdf_path):
+                    raise RuntimeError("Compression failed: output file was not created")
+                if os.path.getsize(output_pdf_path) < 100:
+                    raise RuntimeError(f"Compression failed: output file is only {os.path.getsize(output_pdf_path)} bytes")
         except Exception as exc:
             if os.path.exists(output_pdf_path):
                 try:
