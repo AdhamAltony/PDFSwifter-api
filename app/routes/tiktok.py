@@ -1,12 +1,11 @@
 import asyncio
 import os
+import time
 
 from fastapi import APIRouter
 
 from app.config import DOWNLOAD_FOLDER
 from app.config import DOWNLOAD_RETENTION_SECONDS
-from app.config import DEFAULT_COOKIES_PATH
-from app.config import TIKTOK_COOKIES_PATH
 from app.downloaders.common import download_video
 from app.services.download_tracker import DOWNLOAD_TRACKER
 from app.utils.file_ops import delete_file_later
@@ -37,14 +36,15 @@ async def request_tiktok_download(url: str):
         },
     }
 
-    cookies_path = TIKTOK_COOKIES_PATH or (str(DEFAULT_COOKIES_PATH) if DEFAULT_COOKIES_PATH.exists() else None)
-    if cookies_path:
-        custom_options["cookiefile"] = cookies_path
-
     async def runner():
         DOWNLOAD_TRACKER.update_job(job.process_id, status="running", progress=0.0)
 
+        last_update_time = 0.0
+        last_progress_bucket = -1
+        last_bytes_reported = 0
+
         def hook(data):
+            nonlocal last_update_time, last_progress_bucket, last_bytes_reported
             status = data.get("status")
             if status == "downloading":
                 downloaded = int(data.get("downloaded_bytes") or 0)
@@ -52,6 +52,24 @@ async def request_tiktok_download(url: str):
                 progress = (
                     (downloaded / total) * 100 if total and total > 0 else 0.0
                 )
+
+                now = time.monotonic()
+                progress_bucket = int(progress)
+                should_emit = False
+                if progress_bucket != last_progress_bucket:
+                    should_emit = True
+                elif downloaded - last_bytes_reported >= 1024 * 1024:
+                    should_emit = True
+                elif now - last_update_time >= 0.75:
+                    should_emit = True
+
+                if not should_emit:
+                    return
+
+                last_update_time = now
+                last_progress_bucket = progress_bucket
+                last_bytes_reported = downloaded
+
                 DOWNLOAD_TRACKER.update_job(
                     job.process_id,
                     bytes_downloaded=downloaded,

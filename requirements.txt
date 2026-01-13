@@ -2,6 +2,7 @@ yt-dlp>=2024.04.09
 fastapi
 uvicorn
 httpx
+redis>=5.0.0
 pdfplumber
 pandas
 xlsxwriter

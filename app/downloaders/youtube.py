@@ -1,5 +1,6 @@
 import asyncio
 import os
+import time
 import uuid
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -114,6 +115,9 @@ class RemoteYouTubeDownloader(BaseYouTubeDownloader):
                         )
 
                     bytes_downloaded = 0
+                    last_update_time = 0.0
+                    last_progress_bucket = -1
+                    last_bytes_reported = 0
                     with open(file_path, "wb") as file_handle:
                         async for chunk in response.aiter_bytes():
                             if chunk:
@@ -124,11 +128,25 @@ class RemoteYouTubeDownloader(BaseYouTubeDownloader):
                                     if total_bytes
                                     else 0.0
                                 )
-                                DOWNLOAD_TRACKER.update_job(
-                                    process_id,
-                                    bytes_downloaded=bytes_downloaded,
-                                    progress=progress,
-                                )
+                                now = time.monotonic()
+                                progress_bucket = int(progress)
+                                should_emit = False
+                                if progress_bucket != last_progress_bucket:
+                                    should_emit = True
+                                elif bytes_downloaded - last_bytes_reported >= 1024 * 1024:
+                                    should_emit = True
+                                elif now - last_update_time >= 0.75:
+                                    should_emit = True
+
+                                if should_emit:
+                                    last_update_time = now
+                                    last_progress_bucket = progress_bucket
+                                    last_bytes_reported = bytes_downloaded
+                                    DOWNLOAD_TRACKER.update_job(
+                                        process_id,
+                                        bytes_downloaded=bytes_downloaded,
+                                        progress=progress,
+                                    )
             except httpx.RequestError as exc:
                 raise RuntimeError(f"Failed to reach remote API: {exc}") from exc
 
@@ -155,7 +173,12 @@ class LocalYouTubeDownloader(BaseYouTubeDownloader):
         DOWNLOAD_TRACKER.update_job(process_id, status="running", progress=0.0)
         custom_options = build_youtube_download_options()
 
+        last_update_time = 0.0
+        last_progress_bucket = -1
+        last_bytes_reported = 0
+
         def hook(data):
+            nonlocal last_update_time, last_progress_bucket, last_bytes_reported
             status = data.get("status")
             if status == "downloading":
                 downloaded = int(data.get("downloaded_bytes") or 0)
@@ -163,6 +186,24 @@ class LocalYouTubeDownloader(BaseYouTubeDownloader):
                 progress = (
                     (downloaded / total) * 100 if total and total > 0 else 0.0
                 )
+
+                now = time.monotonic()
+                progress_bucket = int(progress)
+                should_emit = False
+                if progress_bucket != last_progress_bucket:
+                    should_emit = True
+                elif downloaded - last_bytes_reported >= 1024 * 1024:
+                    should_emit = True
+                elif now - last_update_time >= 0.75:
+                    should_emit = True
+
+                if not should_emit:
+                    return
+
+                last_update_time = now
+                last_progress_bucket = progress_bucket
+                last_bytes_reported = downloaded
+
                 DOWNLOAD_TRACKER.update_job(
                     process_id,
                     bytes_downloaded=downloaded,

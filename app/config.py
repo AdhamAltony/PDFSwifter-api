@@ -18,13 +18,33 @@ def _env_bool(name: str, default: bool) -> bool:
         return default
     return value.strip().lower() in {"1", "true", "t", "yes", "y", "on"}
 
-DOWNLOAD_FOLDER = Path(os.getenv("DOWNLOAD_FOLDER", "/data/downloads"))
-PDF_DOWNLOAD_FOLDER = Path(os.getenv("PDF_DOWNLOAD_FOLDER", "/data/pdf_uploads"))
-EXCEL_DOWNLOAD_FOLDER = Path(os.getenv("EXCEL_DOWNLOAD_FOLDER", "/data/excel_outputs"))
-WORD_DOWNLOAD_FOLDER = Path(os.getenv("WORD_DOWNLOAD_FOLDER", "/data/word_outputs"))
-IMAGE_DOWNLOAD_FOLDER = Path(os.getenv("IMAGE_DOWNLOAD_FOLDER", "/data/image_outputs"))
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _default_data_root() -> Path:
+    configured = os.getenv("DATA_ROOT")
+    if configured:
+        return Path(configured)
+
+    docker_root = Path("/data")
+    try:
+        if docker_root.exists() and os.access(str(docker_root), os.W_OK):
+            return docker_root
+    except Exception:
+        pass
+
+    return PROJECT_ROOT
+
+
+DATA_ROOT = _default_data_root()
+
+DOWNLOAD_FOLDER = Path(os.getenv("DOWNLOAD_FOLDER", str(DATA_ROOT / "downloads")))
+PDF_DOWNLOAD_FOLDER = Path(os.getenv("PDF_DOWNLOAD_FOLDER", str(DATA_ROOT / "pdf_uploads")))
+EXCEL_DOWNLOAD_FOLDER = Path(os.getenv("EXCEL_DOWNLOAD_FOLDER", str(DATA_ROOT / "excel_outputs")))
+WORD_DOWNLOAD_FOLDER = Path(os.getenv("WORD_DOWNLOAD_FOLDER", str(DATA_ROOT / "word_outputs")))
+IMAGE_DOWNLOAD_FOLDER = Path(os.getenv("IMAGE_DOWNLOAD_FOLDER", str(DATA_ROOT / "image_outputs")))
+
 
 for folder in (
     DOWNLOAD_FOLDER,
@@ -38,9 +58,8 @@ for folder in (
 CHUNK_SIZE = 1024 * 1024  # 1MB
 YOUTUBE_REMOTE_ENDPOINT = os.environ.get("YOUTUBE_REMOTE_ENDPOINT")
 YOUTUBE_COOKIES_PATH = os.environ.get("YOUTUBE_COOKIES_PATH")
-TIKTOK_COOKIES_PATH = os.environ.get("TIKTOK_COOKIES_PATH")
 
-DEFAULT_COOKIES_PATH = PROJECT_ROOT / "cookies1.txt"
+REDIS_URL = os.environ.get("REDIS_URL")
 
 # Retention / cleanup
 # - *_RETENTION_SECONDS controls how long files stay on disk.
