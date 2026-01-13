@@ -7,6 +7,7 @@ from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import FileResponse
 
 from app.config import (
+    DOWNLOAD_FOLDER,
     EXCEL_DOWNLOAD_FOLDER,
     IMAGE_DOWNLOAD_FOLDER,
     PDF_DOWNLOAD_FOLDER,
@@ -14,6 +15,8 @@ from app.config import (
     UPLOAD_RETENTION_SECONDS,
     WORD_DOWNLOAD_FOLDER,
 )
+
+from app.services.download_tracker import DOWNLOAD_TRACKER
 
 from app.utils.file_ops import (
     ascii_filename,
@@ -25,9 +28,13 @@ from app.utils.pdf_ops import (
     convert_pdf_tables_to_excel,
     convert_pdf_to_docx,
     create_images_zip,
+    compress_pdf,
 )
 
 router = APIRouter(prefix="/pdf", tags=["PDF"])
+
+PDF_COMPRESS_CONCURRENCY = int(os.environ.get("PDF_COMPRESS_CONCURRENCY", "4"))
+_PDF_COMPRESS_SEMAPHORE = asyncio.Semaphore(max(PDF_COMPRESS_CONCURRENCY, 1))
 
 
 @router.post("/to-excel")
@@ -128,3 +135,55 @@ async def pdf_to_image(file: UploadFile = File(...)):
     safe_filename = ascii_filename(os.path.basename(zip_path))
     headers = {"Content-Disposition": f'attachment; filename="{safe_filename}"'}
     return FileResponse(zip_path, filename=safe_filename, headers=headers)
+
+
+@router.post("/compress")
+async def compress_pdf_endpoint(file: UploadFile = File(...), level: str = "balanced"):
+    """Compress a PDF and return a job id.
+
+    Poll status: GET /downloads/{process_id}
+    Download result: GET /downloads/{process_id}/file
+    """
+
+    if not file.filename.lower().endswith(".pdf"):
+        return {"error": "Please upload a PDF file."}
+
+    input_pdf_path = await save_upload_file(file, PDF_DOWNLOAD_FOLDER)
+
+    base_name = safe_stem(file.filename)
+    unique_id = uuid.uuid4().hex
+    suggested_name = f"{base_name}_{unique_id}_compressed.pdf"
+    output_pdf_path = os.path.join(DOWNLOAD_FOLDER, suggested_name)
+
+    job = DOWNLOAD_TRACKER.create_job(source="pdf_compress", url=file.filename)
+
+    async def runner():
+        DOWNLOAD_TRACKER.update_job(job.process_id, status="running", progress=0.0)
+
+        try:
+            async with _PDF_COMPRESS_SEMAPHORE:
+                await asyncio.to_thread(compress_pdf, input_pdf_path, output_pdf_path, level)
+        except Exception as exc:
+            if os.path.exists(output_pdf_path):
+                try:
+                    os.remove(output_pdf_path)
+                except Exception:
+                    pass
+            message = str(exc).replace("\n", " ").strip()
+            DOWNLOAD_TRACKER.update_job(job.process_id, status="failed", error=message)
+            delete_file_later(input_pdf_path, delay=UPLOAD_RETENTION_SECONDS)
+            return
+
+        DOWNLOAD_TRACKER.update_job(
+            job.process_id,
+            status="completed",
+            progress=100.0,
+            file_path=output_pdf_path,
+            suggested_name=suggested_name,
+        )
+
+        delete_file_later(input_pdf_path, delay=UPLOAD_RETENTION_SECONDS)
+        delete_file_later(output_pdf_path, delay=DOWNLOAD_RETENTION_SECONDS)
+
+    asyncio.create_task(runner())
+    return {"process_id": job.process_id}
